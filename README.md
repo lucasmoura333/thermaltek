@@ -1,12 +1,11 @@
-# helpmeplease — driver/daemon do PA120 DIGITAL (Nuvoton `0416:8001`)
+# Thermaltake Assassin 120 Digital — driver/daemon Nuvoton (`0416:8001`)
 
-Driver userspace (e daemon) para o display segmentado + ARGB do cooler **Thermalright PA120
-DIGITAL** no Windows e no Linux. O display é uma corrente de **84 LEDs RGB** atrás de um
-difusor segmentado (7 segmentos + indicadores), controlada por um HID Nuvoton
+Driver userspace open-source (Windows e Linux) para o **display de 84 LEDs RGB** do cooler
+**Thermaltake Assassin 120 Digital**, controlado por um HID Nuvoton
 (`VID 0x0416 / PID 0x8001`, "HID Transfer").
 
 Projeto independente, feito por engenharia reversa do protocolo e validado no hardware.
-Não é afiliado à Thermalright nem à Nuvoton.
+Não é afiliado à Thermaltake nem à Nuvoton.
 
 ## Status
 
@@ -17,6 +16,23 @@ Não é afiliado à Thermalright nem à Nuvoton.
 | Letras, animações, efeitos, modos extras | ✅ funcionando |
 | Port Linux (módulo de kernel + daemon) | 🟡 código completo, verificado offline; falta validar em hardware Linux |
 | Protocolo | ✅ fechado: init + frame de LEDs + query de identidade (sem comandos escondidos) |
+
+## Setup do produto
+
+- **Cooler**: Thermaltake Assassin 120 Digital (torre dupla, 2 fans).
+- **Display**: corrente de **84 LEDs RGB** atrás de um difusor segmentado — 4 grupos de
+  7 segmentos (temp/uso de CPU e GPU), indicadores `°C/°F`, `%` e os LEDs 0/1 e 82/83
+  (difusor escrito CPU/GPU, bicolor).
+- **Controlador**: HID Nuvoton `0416:8001` ("HID Transfer"), endpoints OUT `0x02` / IN `0x81`,
+  pacotes de 64 B; o device é **write-only** para estado (só responde ao query de identidade).
+- **Conexão**: cabo USB interno do cooler ligado a um header USB 2.0 da placa-mãe.
+  - **Windows**: reconhece como HID padrão, sem driver adicional.
+  - **Linux**: aparece como `/dev/hidraw*` (a regra udev do repo libera o acesso).
+- **Software oficial**: TRCC (Thermaltake RGB Control Center). Ele reescreve o display a cada
+  ~160 ms — **mantenha-o fechado** enquanto o daemon roda.
+
+> Não confundir com os modelos "LCD 480×480" da mesma família de software: este cooler usa
+> **apenas** o protocolo de LEDs (`DA DB DC DD`), não há segundo protocolo.
 
 ## Funcionalidades
 
@@ -32,8 +48,7 @@ Não é afiliado à Thermalright nem à Nuvoton.
 
 ## Como funciona (resumo do protocolo)
 
-- Magic único: `DA DB DC DD` (`PM=0x10`, `SUB=0x10`) — não existe segundo protocolo.
-- Endpoints: OUT `0x02` / IN `0x81` (Interrupt, 64 B); o device é **write-only** para estado.
+- Magic único: `DA DB DC DD` (`PM=0x10`, `SUB=0x10`).
 - Frame: **20 B de header + 252 B RGB (84 LEDs) = 272 B**, enviado em **5 relatórios de 64 B**
   (`type=0x02`, `length=0x00FC`).
 - Init: `DA DB DC DD 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00`.
@@ -63,42 +78,48 @@ Pixels livres usados para status/efeitos: 25/26, 57/58 e 24/60 (°F).
 - `linux-driver/` — porta Linux: módulo de kernel (`nuvoton-rgb.c`), build/install, regra udev, systemd.
 - `linux-driver/python-lib/` — biblioteca e daemon:
   - `nuvoton_hid.py` — transporte HID (hidapi no Windows / hidraw no Linux) e mapa LED_*
-  - `lcd_sender.py` — frames do display (84 LEDs, 7-seg, `DIGIT_MASK`, `build_metrics_frame`)
+  - `lcd_sender.py` — frames do display (`DIGIT_MASK`, `build_metrics_frame`, animações)
   - `hardware_monitor.py` — sensores (LibreHardwareMonitor no Windows; hwmon/DRM no Linux)
   - `nuvoton_daemon.py` — daemon (`--mode display`)
   - `test_hidraw_offline.py` — testes offline do port Linux
   - demais `*.py` — probes/ferramentas de engenharia reversa (histórico do trabalho)
 - `NEXT_SESSION_START_HERE.md`, `PROGRESS.md`, `CODEBASE_STATE.md` — estado e notas de sessão.
 
-## Requisitos
+## Instalação
 
-- Windows: Python 3.10+ e [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
-  (extrair em `linux-driver/python-lib/lhm/pkg2/`, precisa de `LibreHardwareMonitorLib.dll`).
-  `pip install -r linux-driver/python-lib/requirements.txt`.
-- Linux: Python 3.10+ e `psutil`; hidraw puro (stdlib) por padrão — hidapi é opcional.
-- **A TRCC.exe deve estar fechada** (o timer de ~160 ms dela sobrescreve os nossos pacotes).
+### Windows
 
-## Rodando
+1. Python 3.10+ e [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor):
+   baixe o release e extraia em `linux-driver/python-lib/lhm/pkg2/`
+   (precisa de `LibreHardwareMonitorLib.dll`).
+2. Dependências Python:
+   ```powershell
+   pip install -r linux-driver\python-lib\requirements.txt
+   ```
+3. O HID usa o driver padrão do Windows (não precisa de Zadig).
+4. Rode o daemon **elevado** (CPU temp via MSR):
+   ```powershell
+   cd linux-driver\python-lib
+   python nuvoton_daemon.py --mode display
+   ```
 
-Windows (executar elevado para CPU temp via MSR):
+### Linux
 
-```powershell
-cd linux-driver\python-lib
-python nuvoton_daemon.py --mode display
-```
-
-Linux:
+O daemon **não precisa** do módulo de kernel: usa o backend `hidraw` (puro stdlib) em
+`/dev/hidraw*` e lê sensores via `hwmon`/DRM. O módulo + sysfs é opcional.
 
 ```bash
-cd linux-driver/python-lib
+# dependências (Ubuntu/Debian)
+sudo apt install python3 python3-pip
+cd linux-driver
+sudo ./build.sh          # módulo + udev + ferramentas (manual: ver INSTALL.md)
+cd python-lib
 pip3 install -r requirements.txt
-python3 test_hidraw_offline.py
-python3 lcd_sender.py --query
+python3 lcd_sender.py --query     # handshake: deve mostrar PM=0x10
 python3 nuvoton_daemon.py --mode display
 ```
 
-O port Linux tem módulo de kernel, regra udev e unit systemd em `linux-driver/`
-(ver `INSTALL.md`); a validação em hardware Linux ainda é TODO.
+Instalação manual, regras udev, systemd e troubleshooting: **[linux-driver/INSTALL.md](linux-driver/INSTALL.md)**.
 
 ## Notas do repositório
 
