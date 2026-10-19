@@ -1,0 +1,55 @@
+{
+  "_comment": "Nuvoton RGB daemon configuration",
+
+  "mode": "cpu_temp",
+  "update_interval_s": 2,
+  "brightness": 1.0,
+
+  "modes": {
+    "cpu_temp": {
+      "_comment": "Color tracks CPU temperature",
+      "thresholds": [
+        { "max": 50,  "color": [0,   0,   255] },
+        { "max": 65,  "color": [0,   255, 128] },
+        { "max": 75,  "color": [0,   255, 0  ] },
+        { "max": 85,  "color": [255, 165, 0  ] },
+        { "max": 999, "color": [255, 0,   0  ] }
+      ]
+    },
+    "gpu_temp": {
+      "_comment": "Color tracks GPU temperature",
+      "thresholds": [
+        { "max": 50,  "color": [0,   0,   255] },
+        { "max": 65,  "color": [0,   255, 128] },
+        { "max": 75,  "color": [0,   255, 0  ] },
+        { "max": 85,  "color": [255, 165, 0  ] },
+        { "max": 999, "color": [255, 0,   0  ] }
+      ]
+    },
+    "cpu_usage": {
+      "_comment": "Color tracks CPU usage percentage",
+      "thresholds": [
+        { "max": 20,  "color": [0,   0,   255] },
+        { "max": 50,  "color": [0,   255, 0  ] },
+        { "max": 80,  "color": [255, 165, 0  ] },
+        { "max": 100, "color": [255, 0,   0  ] }
+      ]
+    },
+    "gpu_usage": {
+      "_comment": "Color tracks GPU usage percentage",
+      "thresholds": [
+        { "max": 20,  "color": [0,   0,   255] },
+        { "max": 50,  "color": [0,   255, 0  ] },
+        { "max": 80,  "color": [255, 165, 0  ] },
+        { "max": 100, "color": [255, 0,   0  ] }
+      ]
+    },
+    "static": {
+      "_comment": "Fixed colour, no sensor input",
+      "color": [0, 180, 255]
+    },
+    "off": {
+      "_comment": "Turn LEDs off"
+    }
+  }
+}

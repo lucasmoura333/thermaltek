@@ -1,0 +1,38 @@
+# Nuvoton RGB segment-display daemon — Thermalright PA120/Assassin 120 Digital
+#
+# Install (as root):
+#   1. Edit User=, WorkingDirectory= and ExecStart= below for your setup.
+#   2. cp systemd/nuvoton-display.service /etc/systemd/system/
+#   3. systemctl daemon-reload
+#   4. systemctl enable --now nuvoton-display
+#
+# Access: 99-nuvoton-rgb.rules grants plugdev/0666 on /dev/hidraw*, so run
+# this service as YOUR user (set User=) — no root needed at runtime.
+# The daemon uses the pure-stdlib hidraw backend (NUVOTON_BACKEND=auto).
+#
+# Stop behaviour: SIGTERM is handled — the daemon turns the display off
+# before exiting, so the last frame is not left latched.
+#
+# Logs: journalctl -u nuvoton-display -f
+
+[Unit]
+Description=Nuvoton RGB segment-display daemon (CPU/GPU metrics)
+After=multi-user.target
+
+[Service]
+Type=simple
+
+# EDIT ME: the user that owns the cooler display (must have hidraw access)
+#User=yourname
+
+# EDIT ME: absolute path to the python-lib directory of your checkout
+WorkingDirectory=/home/yourname/helpmeplease/linux-driver/python-lib
+
+ExecStart=/usr/bin/python3 nuvoton_daemon.py --mode display
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

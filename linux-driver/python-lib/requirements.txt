@@ -1,0 +1,6 @@
+# Windows: hidapi is the transport backend used by nuvoton_hid.py.
+# Linux:  hidapi is optional — the pure-stdlib hidraw backend is preferred
+#         when /dev/hidraw* is present (NUVOTON_BACKEND=hidraw|hidapi to force).
+hidapi>=0.14.0
+psutil>=5.9
+colorama>=0.4.6

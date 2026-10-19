@@ -1,0 +1,29 @@
+# ── runtime logs / state ─────────────────────────────
+linux-driver/python-lib/display_log*.txt
+linux-driver/python-lib/*_check.txt
+linux-driver/python-lib/restart_*.txt
+linux-driver/python-lib/frida_capture.log
+linux-driver/python-lib/hid_capture.txt
+linux-driver/python-lib/captured_traffic_*.txt
+linux-driver/python-lib/sysinfo_dump.txt
+linux-driver/python-lib/usblcd_capture.pcap
+
+# ── python ───────────────────────────────────────────
+__pycache__/
+*.pyc
+
+# ── third-party / vendor binaries ────────────────────
+linux-driver/python-lib/lhm/
+UsbHid.dll
+linux-driver/python-lib/USBLCDNEW.dll
+linux-driver/python-lib/USBLCDNEW.exe
+
+# ── heavy reverse-engineering artifacts (regeneratable)
+linux-driver/python-lib/TRCC_decomp.il
+linux-driver/python-lib/UsbHid_decomp.il
+linux-driver/python-lib/*_decomp.res
+linux-driver/python-lib/*.resources
+linux-driver/python-lib/strings_*.txt
+linux-driver/python-lib/Send*.txt
+linux-driver/python-lib/ThreadSendDeviceData1.txt
+linux-driver/python-lib/shareMemory_*.bin

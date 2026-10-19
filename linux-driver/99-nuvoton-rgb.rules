@@ -1,0 +1,9 @@
+# Allow non-root access to Nuvoton RGB Controller
+# This file should be placed in /etc/udev/rules.d/
+
+# Nuvoton 0416:8001 HID Transfer (RGB Controller)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0416", ATTRS{idProduct}=="8001", MODE="0666", GROUP="plugdev"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0416", ATTRS{idProduct}=="8001", MODE="0666", GROUP="plugdev"
+
+# Auto-load kernel module when device is connected
+ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="0416", ATTRS{idProduct}=="8001", RUN+="/sbin/modprobe nuvoton-rgb"
