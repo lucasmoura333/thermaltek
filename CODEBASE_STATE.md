@@ -1,8 +1,15 @@
-# Codebase State — Session 10 End
+# Codebase State — Session 11 (P3: letras + animações)
 
-**Last Updated**: Session 10 (port Linux codificado + verificado offline; systemd/INSTALL/docs fechados)  
-**Files Modified This Session**: `nuvoton_hid.py`, `hardware_monitor.py`, `requirements.txt`, `nuvoton_daemon.py` (--help cp1252), `INSTALL.md`, `NEXT_SESSION_START_HERE.md`, `PROGRESS.md`  
-**Files Created This Session**: `test_hidraw_offline.py`, `systemd/nuvoton-display.service`
+**Last Updated**: Sessão 11 (P3 validado no hardware: palavras no 7-seg + heartbeat/blink nos 6 pixels livres)
+
+**Update 2026-10-17 (sessão 11)**: correção do mapa — blanks GPU = **57/58** (55/56 são segmentos do dígito das dezenas; captura: '1' do '100' = 57/58); °F **24/60 confirmados LEDs reais** (pulsaram no heartbeat); `build_metrics_frame(status_color=…/status_leds=…)`; teste ao vivo com daemon parado/religado (wrapper `p3_live.ps1`, logs `p3_anim_out*.txt`/`p3_live_check.txt`)
+
+**Files Modified (Session 11)**: `lcd_sender.py`, `nuvoton_hid.py`, `NEXT_SESSION_START_HERE.md`, `PROGRESS.md`, `CODEBASE_STATE.md`
+
+**Update 2026-10-17**: fix do crash `inf` (3 camadas) + repo git; **P2 adiado** — validação Linux fica para a instalação Linux futura (alternativa WSL2+usbipd mapeada)
+
+**Files Modified (Session 10)**: `nuvoton_hid.py`, `hardware_monitor.py`, `requirements.txt`, `nuvoton_daemon.py` (--help cp1252), `INSTALL.md`, `NEXT_SESSION_START_HERE.md`, `PROGRESS.md`  
+**Files Created (Session 10)**: `test_hidraw_offline.py`, `systemd/nuvoton-display.service`
 
 ---
 
@@ -13,6 +20,7 @@
 - **Transportes**: `_HidrawTransport` (puro stdlib, Linux: `/sys/class/hidraw` + `os.read/os.write`) e `_HidapiTransport` (Windows); auto-seleção em `_backend_order()` com override `NUVOTON_BACKEND=hidraw|hidapi`; framing de 65 B idêntico nos dois
 - **Protocolo**: magic `DA DB DC DD` + header 20 B + 252 B RGB (84 LEDs), chunked em 5×64 bytes no EP 0x02
 - **Mapa do display**: constantes `LED_CPU_IND`, `LED_CPU_TEMP` (2-22), `LED_CPU_CELSIUS/FAHR` (23/24), `LED_CPU_USAGE` (25-40), `LED_CPU_PERCENT` (41), `LED_GPU_PERCENT` (42), `LED_GPU_USAGE` (43-58), `LED_GPU_CELSIUS/FAHR` (59/60), `LED_GPU_TEMP` (61-81), `LED_GPU_IND` (82/83)
+- **Pixels livres (P3)**: `FREE_CPU_BLANKS` (25/26), `FREE_GPU_BLANKS` (57/58), `FREE_CPU_FAHR` (24), `FREE_GPU_FAHR` (60), `ALL_FREE_PIXELS`
 - **Funções**: `set_per_led()`, `set_zones_color()` (zonas = grupos reais), `set_color()`, `query_status()`, `list_devices()` (hidraw no Linux, hidapi onde couber)
 
 ### `linux-driver/python-lib/hardware_monitor.py`
@@ -27,11 +35,14 @@
 
 ### `linux-driver/python-lib/lcd_sender.py`
 - **Status**: ✅ WORKING — validado 51/51 offline + teste visual no hardware
-- **Comandos**: `--query` (handshake PM=0x10), `--replay`, `--demo` (42°C 56% / 47°C 21°), `--probe`, `--live`, `--off`; protocolo agnóstico de transporte (`send_body`/`send_raw_frame`)
+- **Comandos**: `--query` (handshake PM=0x10), `--replay`, `--demo` (42°C 56% / 47°C 21°), `--probe`, `--live`, `--anim`, `--off`; protocolo agnóstico de transporte (`send_body`/`send_raw_frame`)
+- **P3 (sessão 11)**: `LETTER_MASK` (letras 7-seg, ordem F A B G E D C), `digit_blocks()`, `show_word()` (letras + dígitos); `--anim` (HOT/Err/HELP + heartbeat/blink); `build_metrics_frame(status_color=…, status_leds=…)` pinta os pixels livres (default `ALL_FREE_PIXELS`)
+- **Rodada exótica (sessão 11)**: `--scroll TEXT` (marquee nos 10 dígitos, `MARQUEE_BLOCKS`), `--chase` (arco-íris/rastro/chuva), `--fuzz` (probe frio: tipos/header/Report ID/length/feature/taxa — taxa medida ~100 fps em burst)
+- **Exótico v2 (sessão 11)**: `--starfield`; `--clock` (`build_clock_frame`: HH:MM + colon 41/42 + segundos binários); `--image PIC` (fax 1 coluna/frame, Pillow); `--beacon FILE` (óptico 2 bits/LED, paleta 4 cores, START magenta/END amarelo, XOR+CRC32, `beacon_encode/decode` — round-trip provado)
 
 ### `linux-driver/python-lib/nuvoton_daemon.py`
 - **Status**: ✅ WORKING — `python nuvoton_daemon.py --mode display`
-- **Modos**: `display`, `zones`, `cpu_temp`, `gpu_temp`, `cpu_usage`, `gpu_usage`, `static`, `off`
+- **Modos**: `display`, `zones`, `cpu_temp`, `gpu_temp`, `cpu_usage`, `gpu_usage`, `static`, `off`, **`fire`** (demoscene térmico 1-D; `NUVOTON_FIRE_SWEEP=1` p/ demo; config `modes.fire`), **`vibe`** (display ↔ 'Zzz' ocioso; env `NUVOTON_VIBE_IDLE`/`NUVOTON_VIBE_SECS`; config `modes.vibe`)
 - SIGINT/SIGTERM desligam o display antes de sair; `--help` ASCII-safe (cp1252)
 
 ### `linux-driver/systemd/nuvoton-display.service`
@@ -64,8 +75,8 @@ Os arquivos `USBLCDNEW.dll`/`.exe`, `_extract_field_rva*.py`, `_decode_tables.py
 ## ⏳ Próximos passos
 
 1. **Uso contínuo com log 1:1** (Windows): `nuvoton_daemon.py --mode display > display_log.txt 2>&1`; comparar exibido × sensores
-2. **Validar no hardware Linux**: `test_hidraw_offline.py` (seção 5 roda) + `lcd_sender.py --query/demo` + daemon `--mode display`
-3. **Exploração**: modo °F, letras/animações (cor por segmento), probe de packet types 0x03+
+2. **Validar no hardware Linux** — ⏸ **adiado (17/10, TODO até a instalação Linux futura)**: `test_hidraw_offline.py` (seção 5 roda) + `lcd_sender.py --query/demo` + daemon `--mode display`. Alternativa mapeada: WSL2+usbipd (usbipd-win 5.3.0; device já `Shared`, busid `3-17`)
+3. **Exploração**: letras/animações ✅ **FEITO** (sessão 11 — `--anim`/`--scroll`/`--chase`, validados no hardware); probe frio ✅ FEITO (tipos/header/Report ID/length = branco estável — negativa fraca; feature set aceito/get rejeitado; taxa até ~100 fps; indicadores bicolor misturado); resta: semântica dos indicadores no daemon (alerta/pulso) e feature reports a fundo
 
 ---
 
@@ -77,7 +88,7 @@ Os arquivos `USBLCDNEW.dll`/`.exe`, `_extract_field_rva*.py`, `_decode_tables.py
 | CPU temp requer Admin (Windows/AMD MSR) | Fallback: cor de temp espelha usage | ✅ Active |
 | Matar o daemon com kill duro deixa frame latched | Rodar `lcd_sender.py --off` depois | ℹ️ Known |
 | `°C` aparece como `�C` no console cp1252 | Cosmético (encoding do terminal) | ℹ️ Known |
-| Seção fd I/O do teste offline só roda em Linux | Windows: skip esperado; validar na máquina Linux (P2) | ℹ️ Expected |
+| Seção fd I/O do teste offline só roda em Linux | Windows: skip esperado; validar na máquina Linux (P2 — **adiado**: instalação Linux futura) | ℹ️ Expected |
 
 ---
 

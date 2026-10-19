@@ -88,6 +88,18 @@ LED_GPU_FAHR    = [60]
 LED_GPU_TEMP    = list(range(81, 60, -1))   # 3 digits x 7 (mirrored)
 LED_GPU_IND     = [82, 83]
 
+# Free pixels — LEDs that stay dark in normal °C operation (P3, 2026-10-17):
+#   * the two leading blanks of each usage group — TRCC lights them only when
+#     the value reaches 100 (they form the leading "1"; capture frame 50);
+#   * the °F LEDs (24 / 60) — users showing °C never light them.
+# Validated against the 51-frame TRCC capture (blank pair on the mirrored GPU
+# side is 57/58 — 55/56 are segments of the usage tens digit, lit for 10-99).
+FREE_CPU_BLANKS = LED_CPU_USAGE[:2]                 # 25, 26
+FREE_GPU_BLANKS = sorted(LED_GPU_USAGE[:2])         # 57, 58 (mirrored group)
+FREE_CPU_FAHR   = LED_CPU_FAHR                      # 24
+FREE_GPU_FAHR   = LED_GPU_FAHR                      # 60
+ALL_FREE_PIXELS = FREE_CPU_BLANKS + FREE_GPU_BLANKS + FREE_CPU_FAHR + FREE_GPU_FAHR
+
 # Packet type byte at offset 12
 PKT_TYPE_INIT = 0x01
 PKT_TYPE_LED  = 0x02

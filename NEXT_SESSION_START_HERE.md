@@ -1,11 +1,39 @@
 ﻿# PROXIMA SESSAO — START HERE
 
 **Status**: Display de segmentos 100% decodificado e validado; daemon `--mode display` rodando ao vivo (Windows).
-**Objetivo atual**: (1) uso contínuo com log para comparar exibido × sensores 1:1; (2) validar o port Linux no hardware Linux; (3) começar a exploração de recursos.
+**Objetivo atual**: (1) uso contínuo com log para comparar exibido × sensores 1:1; (2) validar o port Linux no hardware Linux — ⏸ **adiado: aguardando instalação Linux (decisão 17/10)**; (3) começar a exploração de recursos.
 **Progresso LED + Display**: 100% FUNCIONANDO (Windows).
-**Port Linux**: código completo e verificado offline (16/16) — falta rodar no hardware Linux.
+**Port Linux**: código completo e verificado offline (16/16) — falta rodar no hardware Linux (**adiado: usuário fará instalação Linux no futuro — decisão 17/10**).
 
 > ⚠️ **NÃO REABRIR**: o "LCD 480x480 / USBLCDNEW / magic 12 34 56 78" foi premissa derrubada na Sessão 9 (evidência tripla: pcaps só `DA DB DC DD`, EP 0x81 mudo, USBLCDNEW.dll sem handler pro PID 0x8001). O display é uma corrente de 84 LEDs RGB (7 segmentos). Não existe segundo protocolo.
+
+---
+
+## O QUE MUDOU (Session 11) — LEIA PRIMEIRO
+
+P3 — letras e animações feitas e validadas no hardware:
+
+- `lcd_sender.py --anim` (novo): palavras no 7-seg — `LETTER_MASK` + `show_word()` + `digit_blocks()` — 'HOT' (vermelho) no lado CPU, 'Err' (âmbar) no GPU, 'HELP' azul rolando; heartbeat (duplo pulso) e blink x3 nos pixels livres. `build_metrics_frame(status_color=…/status_leds=…)` pinta pixels livres sobre as métricas.
+- **Pixels livres = 6, validados ao vivo**: blanks 25/26 (CPU) + **57/58** (GPU) + °F **24/60** (24/60 confirmados LEDs reais — pulsaram no teste). ⚠ Correção do probe 17/10: **55/56 não são livres** — são segmentos do dígito das dezenas do uso GPU (acendem para 10–99%; na captura, o par livre é 57/58, o '1' do '100'). `nuvoton_hid.py`: constantes `FREE_*` / `ALL_FREE_PIXELS`.
+- Teste ao vivo: daemon parado (wrapper `p3_live.ps1`, UAC) + 2 passagens do `--anim`; logs `p3_anim_out*.txt` + `p3_live_check.txt`; daemon religado (PID novo, admin).
+
+**Rodada exótica (sessão 11, 2º show)** — `--scroll` / `--chase` / `--fuzz`:
+
+- **Marquee** `--scroll "TEXT"`: rola texto pelos **10 dígitos físicos** (CPU temp | CPU usage | GPU usage | GPU temp) — 'PA120 DIGITAL' validado no olho ✓ (`_glyph_mask` agora aceita letras + dígitos).
+- **`--chase`**: arco-íris girando + ponto com rastro + chuva — tudo suave ✓.
+- **`--fuzz` (probe frio)**: tipos de pacote 0x00–0xFF, header bytes 4/8, **Report ID 1/2**, length mentiroso (0/1/FFFF) → **branco estável em tudo** (negativa fraca: firmware só age no framing conhecido). `send_feature_report` **aceito** (sem efeito visível); `get_feature_report` → `OSError('read error')`.
+- **Escritos CPU/GPU**: impressão **física fixa** no difusor (não é desenho de LED); os 2 LEDs por glifo (0/1 e 82/83) compartilham o difusor → cores **misturam** (bicolor confirmado: CPU vermelho/verde, GPU azul/amarelo).
+- **Taxa de escrita medida**: burst de 300 frames em 3,01 s → **~100 fps efetivos**; dot a 10/30/60 fps suave (o display aguenta bem mais que os 6,7 fps do TRCC).
+- Logs: `p4_out1/2/3.txt` + `p4_check.txt`; wrapper `p4_sideshow.ps1`.
+
+**Rodada exótica v2 (sessão 11, 3º show)** — starfield/clock/image/beacon + fire/vibe:
+
+- `--starfield` ✅ aprovado no olho (estrelas + cadente).
+- `--clock` (HH:MM nos dígitos de uso, colon 41/42, segundos em binário nos livres) — frame validado offline vs hora fixa; sem prioridade ("ignora").
+- `--image PIC` (fax: 1 coluna 84 px por frame) e `--beacon FILE` (óptico: 2 bits/LED em 4 cores, START magenta / END amarelo, XOR por quadro + CRC32, decoder com detecção de perda/corrupção) — **round-trip do beacon provado** (102 frames, 1802 B, self-test OK); no display segmentado o visual não lê bem (arquivados como ferramenta).
+- `--mode fire` ✅✅ **aprovado** (fogo 1-D nos 84 LEDs, intensidade = temp, 'HOT' pisca ≥ hot_at, `NUVOTON_FIRE_SWEEP=1` p/ demo).
+- `--mode vibe` (display ↔ 'Zzz' ocioso; `NUVOTON_VIBE_IDLE`/`NUVOTON_VIBE_SECS`) — implementado; no demo não entrou em Zzz (limiar 25% abaixo do baseline da máquina) → re-testar em sessão futura com limiar folgado.
+- Logs: `p5_*.txt`; wrapper `p5_show.ps1`.
 
 ---
 
@@ -69,7 +97,11 @@ Segmentos por dígito: ordem **F, A, B, G, E, D, C**.
 3. Deixar rodando um tempo; comparar os valores logados (a cada 2 s) com o que o display mostra e com uma leitura independente (ex.: HWiNFO/LHM aberto, ou `python hardware_monitor.py` em outro terminal) para medir o quão 1:1 está. Anotar divergências (CPU temp sem admin espelha uso; GPU `D3D 3D` vs edge/Junction etc.).
 4. Ctrl-C desliga o display (SIGINT tratado). Se matar duro, rodar `lcd_sender.py --off` depois.
 
-## PRIORIDADE 2 — VALIDAR NO HARDWARE LINUX
+## PRIORIDADE 2 — VALIDAR NO HARDWARE LINUX ⏸ ADIADO (2026-10-17) — TODO
+
+**Decisão do usuário (17/10)**: ele fará uma instalação Linux no futuro; a validação fica como TODO até lá — nada bloqueado (o port está pronto; Windows segue 100%).
+
+Alternativa mapeada (não escolhida por ora): **WSL2 + usbipd** — usbipd-win 5.3.0 já instalado e o device já `Shared` (busid `3-17`); WSL Ubuntu pronta (kernel 6.6.87.2, Python 3.12; falta só `psutil`, instalar em venv — o Python do sistema é PEP 668). Caveats: o `attach` derruba o device do Windows (parar o daemon antes; display apaga durante o teste) e o kernel WSL pode não expor hidraw.
 
 No PC Linux (o device ou um igual), TRCC não existe lá:
 
@@ -86,11 +118,13 @@ Se `--query` falhar: conferir `99-nuvoton-rgb.rules` instalada e permissão do `
 
 ## PRIORIDADE 3 — EXPLORAR RECURSOS (depois do básico)
 
-- **LEDs °F** (24, 60) nunca acesos → modo Fahrenheit configurável.
-- **Cor por segmento** (não só por grupo) → letras no 7-seg (`HELP`, `HOT`, `Err`…), animações, blink.
-- **Prefixos blanks** (25, 26 / 55, 56) → pixels de status extras.
-- Indicadores 0,1 / 82,83 → semântica livre (pulso de carga, alerta…).
-- **Probe exploratório** de packet types 0x03+ / feature reports (device é write-only, sem ACK — anotar que a negativa é fraca).
+> **Probe "pixels extras" — FEITO (17/10)**: corrente = **84 LEDs, confirmada no fio**. LEDs 84–99 não acendem em nenhuma variante (len=300, len=252, 6 relatórios até ~120); TRCC declara `length=252` e padding zerado — bate. **Blanks 25/26 + 57/58 = LEDs reais** → pixels livres (o probe acendeu 25/26/55/56 em magenta — 55/56 são segmentos do dígito das dezenas, ver sessão 11). Scripts: `Temp\opencode\probe_extra.py` + `explore_extra.ps1`; logs `probe_extra_out*.txt` / `explore_check*.txt` na pasta do projeto.
+
+- **LEDs °F** (24, 60): usuário usa só °C → **pixels livres** — ✅ validados como LEDs reais no teste ao vivo (sessão 11).
+- **Cor por segmento** (não só por grupo) → letras no 7-seg (`HELP`, `HOT`, `Err`…) e animações → ✅ **FEITO** (sessão 11, `lcd_sender.py --anim`).
+- **Prefixos blanks** (25, 26 / **57, 58**) → pixels de status extras → ✅ usados no heartbeat/blink (o probe de 17/10 apontou 55/56, mas a captura mostra que esses são segmentos do dígito das dezenas; o par livre GPU é 57/58).
+- Indicadores 0,1 / 82,83 → 2 LEDs atrás de 1 difusor por escrito CPU/GPU: cores **misturam** (bicolor ✓, sessão 11); semântica de carga/alerta no daemon — pendente.
+- **Probe exploratório** de packet types 0x03+ / feature reports → ✅ **FEITO** (sessão 11): tudo deu branco estável (negativa fraca, write-only); feature set aceito/sem efeito, get rejeitado.
 
 ---
 

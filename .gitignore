@@ -1,6 +1,10 @@
 # ── runtime logs / state ─────────────────────────────
 linux-driver/python-lib/display_log*.txt
-linux-driver/python-lib/*_check.txt
+linux-driver/python-lib/probe_extra_out*.txt
+linux-driver/python-lib/p3_anim_out*.txt
+linux-driver/python-lib/p4_out*.txt
+linux-driver/python-lib/p5_*.txt
+linux-driver/python-lib/*_check*.txt
 linux-driver/python-lib/restart_*.txt
 linux-driver/python-lib/frida_capture.log
 linux-driver/python-lib/hid_capture.txt

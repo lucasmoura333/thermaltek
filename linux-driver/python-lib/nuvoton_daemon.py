@@ -19,6 +19,12 @@ Modes (set in config.json or via --mode):
                 indicator LEDs reflect overall load
     display   — real numbers on the segment display: CPU/GPU temperature
                 and usage as digits, each group coloured by its gradient
+    fire      — thermal demoscene: 1-D fire simulation on all 84 LEDs,
+                intensity follows the hottest sensor; >= hot_at flashes
+                "HOT" over the flames; NUVOTON_FIRE_SWEEP=1 demo ramp
+    vibe      — auto mood: normal display while busy; after idle_samples
+                consecutive idle reads -> "Zzz" + slow blue breathing on
+                the free pixels (env: NUVOTON_VIBE_IDLE / NUVOTON_VIBE_SECS)
 
 The daemon runs until killed (Ctrl-C).
 """
@@ -28,6 +34,7 @@ import json
 import logging
 import math
 import os
+import random
 import signal
 import sys
 import time
@@ -36,9 +43,11 @@ from typing import List, Optional, Tuple
 # Add directory containing this script to path so local imports work
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from nuvoton_hid import NuvotonDevice
+from nuvoton_hid import (NuvotonDevice, LED_CPU_TEMP, LED_GPU_TEMP,
+                         ALL_FREE_PIXELS)
 from hardware_monitor import HardwareSnapshot, read_all
-from lcd_sender import build_metrics_frame, send_body
+from lcd_sender import (build_metrics_frame, send_body, DisplayFrame,
+                        show_word, digit_blocks)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -329,6 +338,246 @@ def run_display(config_path: str = _DEFAULT_CONFIG,
     return True
 
 
+# ── Fire mode (thermal demoscene) ──────────────────────────────────────────
+
+_FIRE_RAMP = [
+    (0,   (0, 0, 0)),
+    (50,  (90, 0, 0)),
+    (110, (255, 60, 0)),
+    (180, (255, 170, 20)),
+    (235, (255, 255, 160)),
+]
+
+
+def _fire_color(v: float) -> Tuple[int, int, int]:
+    """Heat 0..255 -> fire palette (black -> red -> orange -> white-yellow)."""
+    v = max(0.0, min(255.0, float(v)))
+    for i in range(len(_FIRE_RAMP) - 1):
+        v0, c0 = _FIRE_RAMP[i]
+        v1, c1 = _FIRE_RAMP[i + 1]
+        if v0 <= v <= v1:
+            t = (v - v0) / (v1 - v0)
+            return (
+                int(c0[0] + t * (c1[0] - c0[0])),
+                int(c0[1] + t * (c1[1] - c0[1])),
+                int(c0[2] + t * (c1[2] - c0[2])),
+            )
+    return _FIRE_RAMP[-1][1]
+
+
+def _fire_step(heat: List[float], intensity: float, rng) -> List[float]:
+    """
+    One 1-D fire tick: sparks scale with *intensity*, heat spreads to the
+    neighbours and decays (slower = hotter).  Returns the new heat array.
+    """
+    intensity = max(0.0, min(1.0, intensity))
+    n = len(heat)
+    for _ in range(int(2 + 12 * intensity)):
+        pos = rng.randrange(n)
+        heat[pos] = 255.0
+        heat[(pos + 1) % n] = max(heat[(pos + 1) % n], 180.0)
+    decay = 5.0 - 3.6 * intensity
+    new = [0.0] * n
+    for i in range(n):
+        avg = (heat[i] * 2 + heat[(i - 1) % n] + heat[(i + 1) % n]
+               + heat[(i - 2) % n] * 0.5) / 4.5
+        new[i] = max(0.0, avg - decay)
+    return new
+
+
+def run_fire(config_path: str = _DEFAULT_CONFIG,
+             run_once: bool = False) -> bool:
+    """
+    Thermal fire: the whole 84-LED chain burns; the hottest sensor (CPU/GPU)
+    drives spark rate / decay.  At >= hot_at (or sweep peak) the word "HOT"
+    flashes over the flames every ~1.5s.  NUVOTON_FIRE_SWEEP=1 runs a 40s
+    calm -> inferno -> calm ramp for demos.
+    """
+    cfg = load_config(config_path)
+    brightness = float(cfg.get("brightness", 1.0))
+    fire_cfg = cfg.get("modes", {}).get("fire", {})
+    t_min = float(fire_cfg.get("t_min", 45))
+    t_max = float(fire_cfg.get("t_max", 90))
+    hot_at = float(fire_cfg.get("hot_at", 85))
+    sweep = os.environ.get("NUVOTON_FIRE_SWEEP") == "1"
+    rng = random.Random()
+
+    with NuvotonDevice() as dev:
+        if not dev.device:
+            logger.error("Device not found. Is the cooler connected? (TRCC must be CLOSED)")
+            return False
+
+        dev.send_init()
+        logger.info(f"Fire daemon started (sweep={sweep})")
+
+        signal.signal(signal.SIGINT,  _handle_signal)
+        signal.signal(signal.SIGTERM, _handle_signal)
+
+        heat = [0.0] * 84
+        snap = None
+        t_read = 0.0
+        hot_next = 0.0
+        hot_until = 0.0
+        t_start = time.time()
+
+        while _running:
+            now = time.time()
+            if snap is None or (now - t_read) > 0.5:
+                snap = read_all()
+                t_read = now
+
+            temps = [v for v in (snap.cpu_temp, snap.gpu_temp)
+                     if v is not None and math.isfinite(v)]
+            t_hot = max(temps) if temps else None
+
+            if sweep:
+                ph = ((now - t_start) % 40.0) / 40.0
+                intensity = 1.0 - abs(2 * ph - 1)
+            elif t_hot is None:
+                intensity = 0.15
+            else:
+                intensity = max(0.15, min(1.0, (t_hot - t_min) / (t_max - t_min)))
+
+            heat = _fire_step(heat, intensity, rng)
+
+            frame = DisplayFrame()
+            for i, v in enumerate(heat):
+                frame.put(i, _fire_color(v))
+
+            hot_active = (sweep and intensity > 0.92) or (
+                t_hot is not None and t_hot >= hot_at)
+            if hot_active and now >= hot_next:
+                hot_until = now + 0.5
+                hot_next = now + 1.5
+            if now < hot_until:
+                show_word(frame, digit_blocks(LED_CPU_TEMP, 3), "HOT", (255, 40, 0))
+                show_word(frame, digit_blocks(LED_GPU_TEMP, 3), "HOT", (255, 40, 0))
+
+            if brightness != 1.0:
+                body = bytes(min(255, int(c * brightness)) for c in frame.to_bytes())
+            else:
+                body = frame.to_bytes()
+            send_body(dev, body)
+
+            cpu_s = f"{snap.cpu_temp:.1f}" if snap.cpu_temp is not None else "None"
+            gpu_s = f"{snap.gpu_temp:.1f}" if snap.gpu_temp is not None else "None"
+            logger.debug(f"fire | cpu {cpu_s} gpu {gpu_s} | intensidade {intensity:.2f}")
+
+            if run_once:
+                break
+            time.sleep(0.05)
+
+        dev.set_off()
+        logger.info("LEDs off, fire daemon stopped")
+    return True
+
+
+# ── Vibe mode (auto mood: display <-> Zzz) ─────────────────────────────────
+
+def _zzz_body(phase: float) -> bytes:
+    """'Zzz' + breathing free pixels; *phase* 0..1 = breath level."""
+    frame = DisplayFrame()
+    v = int(30 + 110 * phase)
+    show_word(frame, digit_blocks(LED_CPU_TEMP, 3), "Zzz", (0, v, min(255, v + 60)))
+    for led in ALL_FREE_PIXELS:
+        frame.put(led, (0, int(15 + 90 * phase), int(50 + 140 * phase)))
+    return frame.to_bytes()
+
+
+def run_vibe(config_path: str = _DEFAULT_CONFIG,
+             run_once: bool = False) -> bool:
+    """
+    Auto mood daemon: normal sensor display while the machine is busy; after
+    *idle_samples* consecutive reads with CPU+GPU usage below *idle_usage*%,
+    switch to "Zzz" (breathing blue).  Any load returns to the display.
+
+    Env overrides for demos: NUVOTON_VIBE_IDLE (usage %), NUVOTON_VIBE_SECS
+    (seconds of idle before Zzz; converted to samples).
+    """
+    cfg = load_config(config_path)
+    interval = cfg.get("update_interval_s", 2)
+    brightness = float(cfg.get("brightness", 1.0))
+    vibe_cfg = cfg.get("modes", {}).get("vibe", {})
+    idle_usage = float(os.environ.get("NUVOTON_VIBE_IDLE",
+                                      vibe_cfg.get("idle_usage", 5)))
+    if os.environ.get("NUVOTON_VIBE_SECS"):
+        idle_samples = max(1, int(float(os.environ["NUVOTON_VIBE_SECS"]) / interval))
+    else:
+        idle_samples = int(vibe_cfg.get("idle_samples", 15))
+
+    import psutil as _psutil
+    _psutil.cpu_percent(interval=None)
+    time.sleep(0.1)
+
+    with NuvotonDevice() as dev:
+        if not dev.device:
+            logger.error("Device not found. Is the cooler connected? (TRCC must be CLOSED)")
+            return False
+
+        dev.send_init()
+        logger.info(f"Vibe daemon started (idle < {idle_usage}% for {idle_samples} samples)")
+
+        signal.signal(signal.SIGINT,  _handle_signal)
+        signal.signal(signal.SIGTERM, _handle_signal)
+
+        state = "display"
+        counter = 0
+        zzz_start = 0.0
+        t_load_check = 0.0
+
+        while _running:
+            if state == "display":
+                snap = read_all()
+                cpu_t_col = _temp_color(snap.cpu_temp)
+                cpu_u_col = _usage_color(snap.cpu_usage)
+                gpu_t_col = _temp_color(snap.gpu_temp)
+                gpu_u_col = _usage_color(snap.gpu_usage)
+                if snap.cpu_temp is None:
+                    cpu_t_col = cpu_u_col
+                body = build_metrics_frame(
+                    snap.cpu_temp  if snap.cpu_temp  is not None else 0,
+                    snap.cpu_usage if snap.cpu_usage is not None else 0,
+                    snap.gpu_temp  if snap.gpu_temp  is not None else 0,
+                    snap.gpu_usage if snap.gpu_usage is not None else 0,
+                    cpu_temp_color=cpu_t_col, cpu_usage_color=cpu_u_col,
+                    gpu_temp_color=gpu_t_col, gpu_usage_color=gpu_u_col,
+                )
+                if brightness != 1.0:
+                    body = bytes(min(255, int(c * brightness)) for c in body)
+                send_body(dev, body)
+
+                idle = ((snap.cpu_usage is None or snap.cpu_usage < idle_usage)
+                        and (snap.gpu_usage is None or snap.gpu_usage < idle_usage))
+                counter = counter + 1 if idle else 0
+                if counter >= idle_samples:
+                    state = "zzz"
+                    zzz_start = time.time()
+                    logger.info("vibe | ocioso -> Zzz")
+                if run_once:
+                    break
+                time.sleep(interval)
+            else:
+                t = time.time() - zzz_start
+                send_body(dev, _zzz_body(0.5 + 0.5 * math.sin(t * 2 * math.pi / 4.0)))
+                now = time.time()
+                if now - t_load_check >= 1.0:
+                    t_load_check = now
+                    snap = read_all()
+                    busy = ((snap.cpu_usage is not None and snap.cpu_usage >= idle_usage)
+                            or (snap.gpu_usage is not None and snap.gpu_usage >= idle_usage))
+                    if busy:
+                        state = "display"
+                        counter = 0
+                        logger.info("vibe | carga voltou -> display")
+                if run_once:
+                    break
+                time.sleep(0.2)
+
+        dev.set_off()
+        logger.info("LEDs off, vibe daemon stopped")
+    return True
+
+
 # ── Daemon loop ────────────────────────────────────────────────────────────
 
 _running = True
@@ -433,6 +682,9 @@ Modes:
               indicators reflect overall load
   display   — real numbers on the segment display (CPU/GPU temp + usage),
               each group coloured by its gradient
+  fire      — thermal demoscene: fire on all 84 LEDs, intensity = hottest
+              sensor; HOT flashes over the flames when overheating
+  vibe      — auto mood: display while busy, "Zzz" + breathing when idle
 
 Remember: TRCC.exe must be CLOSED; its timer overwrites our packets.
         """,
@@ -443,7 +695,8 @@ Remember: TRCC.exe must be CLOSED; its timer overwrites our packets.
     )
     parser.add_argument(
         "--mode", default=None,
-        choices=["cpu_temp", "gpu_temp", "cpu_usage", "gpu_usage", "static", "off", "zones", "display"],
+        choices=["cpu_temp", "gpu_temp", "cpu_usage", "gpu_usage", "static",
+                 "off", "zones", "display", "fire", "vibe"],
         help="Override the mode from config.json"
     )
     parser.add_argument(
@@ -465,6 +718,10 @@ Remember: TRCC.exe must be CLOSED; its timer overwrites our packets.
         ok = run_zones(config_path=args.config, run_once=args.once)
     elif mode == "display":
         ok = run_display(config_path=args.config, run_once=args.once)
+    elif mode == "fire":
+        ok = run_fire(config_path=args.config, run_once=args.once)
+    elif mode == "vibe":
+        ok = run_vibe(config_path=args.config, run_once=args.once)
     else:
         ok = run(config_path=args.config, mode_override=mode, run_once=args.once)
 

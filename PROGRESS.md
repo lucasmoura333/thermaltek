@@ -3,7 +3,11 @@
 **Dispositivo**: Nuvoton HID Transfer — VID `0x0416` / PID `0x8001`  
 **Objetivo**: Controle RGB + display no Windows/Linux reproduzindo o protocolo do TRCC  
 **Status**: LED + display 100% funcionando no Windows; port Linux com código completo e verificado offline  
-**Last Updated**: Session 10 — transporte hidraw (Linux) + sensores hwmon implementados, testados offline (16/16), systemd/docs fechados
+**Last Updated**: Sessão 11 — P3: letras no 7-seg + heartbeat/blink nos pixels livres validados no hardware (`lcd_sender.py --anim`)
+
+**Update 2026-10-17** (pós-Sessão 10): fix do crash `inf` (3 camadas) + repo git (`4bdc3a4`, `c600f1c`) + daemon estável (0 erros); **P2 adiado** — validação Linux fica para a instalação Linux futura (alternativa WSL2+usbipd mapeada, não escolhida)
+
+**Update 2026-10-17 (sessão 11)**: **P3 iniciado** — letras no 7-seg + heartbeat/blink nos 6 pixels livres validados no hardware (`lcd_sender.py --anim`); correção do mapa: blanks GPU = **57/58** (55/56 são segmentos do dígito das dezenas); °F 24/60 confirmados LEDs reais
 
 ---
 
@@ -64,7 +68,7 @@ Segmentos dentro de cada dígito: ordem **F, A, B, G, E, D, C**
 - [x] `test_hidraw_offline.py`: 16 checks offline (enum fake sysfs, backend, framing 65 B nos 51 frames, lógica hwmon/DRM com árvores falsas, fd I/O Linux-only)
 - [x] `systemd/nuvoton-display.service` + seção no `INSTALL.md` (roda como usuário; udev dá acesso ao hidraw)
 - [x] Windows sem regressão: selftest 51/51, LHM OK; `--help` não quebra mais em cp1252
-- [ ] **Falta**: rodar no hardware Linux (query/demo/display) — ver NEXT_SESSION_START_HERE §P2
+- [ ] **Falta (adiado 17/10)**: rodar no hardware Linux (query/demo/display) — usuário fará instalação Linux no futuro; ver NEXT_SESSION_START_HERE §P2
 
 ---
 
@@ -73,7 +77,8 @@ Segmentos dentro de cada dígito: ordem **F, A, B, G, E, D, C**
 - [x] Mapa LED↔display validado **dígito a dígito** contra captura real do TRCC
 - [x] Auto-teste offline: 51/51 frames reconstruídos idênticos (segmentos + cores, incl. overflow 100% = prefixos + "00")
 - [x] **Teste visual no hardware**: replay e demo mostraram os números corretos nos lugares certos
-- [x] `lcd_sender.py`: `--query` / `--replay` / `--demo` / `--probe` / `--live` / `--off`
+- [x] `lcd_sender.py`: `--query` / `--replay` / `--demo` / `--probe` / `--live` / `--anim` / `--off`
+- [x] P3 (sessão 11): `LETTER_MASK`/`show_word()`/`digit_blocks()` (letras no 7-seg) + `--anim` (HOT/Err/HELP + heartbeat/blink nos 6 pixels livres 24/25/26/57/58/60)
 - [x] `nuvoton_daemon.py --mode display`: números reais (CPU/GPU temp+uso) com gradiente por grupo
 - [x] `set_zones_color()` corrigido: zonas mapeiam os grupos reais (dígitos + unidade + indicadores)
 - [x] `test_lcd_zones.py` atualizado para o mapa real (scan por LED individual)
@@ -97,7 +102,10 @@ python nuvoton_daemon.py --mode display > display_log.txt 2>&1
 ```
 Deixar rodando; comparar valores logados × display × leitura independente (HWiNFO/LHM/`hardware_monitor.py`). Anotar divergências.
 
-### P2: Validação no hardware Linux
+### P2: Validação no hardware Linux ⏸ ADIADO (17/10) — TODO
+**Decisão do usuário**: fará uma instalação Linux no futuro; a validação fica como TODO até lá — nada bloqueado.  
+**Alternativa mapeada (não escolhida)**: WSL2 + usbipd — usbipd-win 5.3.0 instalado, device já `Shared` (busid `3-17`); WSL Ubuntu ok (falta `psutil` em venv — Python do sistema é PEP 668). Caveat: o attach derruba o device do Windows (parar daemon; display apaga no teste).
+
 ```bash
 python3 test_hidraw_offline.py   # seção 5 deve rodar (não skip)
 python3 lcd_sender.py --query    # deve logar "Connected [hidraw]"
@@ -107,10 +115,25 @@ python3 nuvoton_daemon.py --mode display
 Se falhar: regra udev `99-nuvoton-rgb.rules` + permissões do `/dev/hidraw*`.
 
 ### P3: Exploração de recursos (depois do básico)
-- LEDs °F (24, 60) → modo Fahrenheit configurável
-- Cor por segmento → letras no 7-seg, animações/blink
-- Prefixos blanks (25,26 / 55,56) → pixels de status
-- Probe exploratório de packet types 0x03+ / feature reports (write-only, sem ACK)
+**Feito 17/10**: probe além-84 → **corrente = 84 LEDs confirmada** (84–99 e 6 relatórios: nada acende; TRCC: `length=252` + padding zero).
+**Feito 17/10 (sessão 11)**: letras + animações validadas no hardware (`lcd_sender.py --anim`):
+- [x] Letras no 7-seg: `LETTER_MASK`/`show_word()`/`digit_blocks()` — HOT (vermelho, lado CPU), Err (âmbar, lado GPU), HELP azul rolando ✓ visual
+- [x] **Pixels livres = 6** (heartbeat/blink ao vivo): blanks 25/26 (CPU) + **57/58** (GPU) + °F **24/60** (reais — pulsaram). ⚠ 55/56 **não** são livres: segmentos do dígito das dezenas do uso GPU (captura acende 55/56 para 10–99% e 57/58 como '1' do '100')
+- [x] `build_metrics_frame(status_color=…/status_leds=…)`; `nuvoton_hid.FREE_*`/`ALL_FREE_PIXELS`
+- Logs do teste: `p3_anim_out.txt`, `p3_anim_out2.txt`, `p3_live_check.txt` (daemon religado pós-teste)
+
+**Rodada exótica (sessão 11, 2º show)** — `--scroll` / `--chase` / `--fuzz`:
+- [x] Marquee nos 10 dígitos ('PA120 DIGITAL' ✓ no olho)
+- [x] Chase (arco-íris/rastro/chuva) ✓ suave; taxa: 10/30/60 fps suaves, burst **~100 fps** (300 frames / 3,01 s)
+- [x] Probe frio fechado: tipos 0x00–0xFF / header 4/8 / Report ID 1/2 / length 0/1/FFFF → **branco estável** (negativa fraca); feature set aceito (sem efeito), get rejeitado; indicadores = 2 LEDs/difusor → **bicolor misturado** (escritos CPU/GPU são impressão física fixa)
+- Logs: `p4_out1/2/3.txt`, `p4_check.txt`
+**Rodada exótica v2 (sessão 11, 3º show)**:
+- [x] `--starfield` ✓ aprovado; `--mode fire` ✓✓ aprovado (fogo 1-D; 'HOT' ≥ hot_at; sweep p/ demo)
+- [x] `--beacon` (óptico: 2 bits/LED, 4 cores, CRC32 + XOR; decoder detecta perda/corrupção) — round-trip provado (102 frames/1802 B OK); visual fraco no segmentado
+- [x] `--clock` e `--image` (fax coluna 84px) implementados/validados offline — sem prioridade visual
+- [~] `--mode vibe` implementado; Zzz não disparou no demo (limiar 25% < baseline) — re-testar depois
+- Logs: `p5_*.txt`; wrapper `p5_show.ps1`
+- [ ] Pendente: semântica dos indicadores no daemon (pulso de carga/alerta); feature reports a fundo (set passa, get rejeitado); vibe Zzz com limiar real
 
 ---
 

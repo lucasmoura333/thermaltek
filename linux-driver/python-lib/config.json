@@ -48,6 +48,17 @@
       "_comment": "Fixed colour, no sensor input",
       "color": [0, 180, 255]
     },
+    "fire": {
+      "_comment": "Thermal demoscene: intensity from max(cpu_temp, gpu_temp)",
+      "t_min": 45,
+      "t_max": 90,
+      "hot_at": 85
+    },
+    "vibe": {
+      "_comment": "Auto mood: idle below idle_usage% for idle_samples reads -> Zzz",
+      "idle_usage": 5,
+      "idle_samples": 15
+    },
     "off": {
       "_comment": "Turn LEDs off"
     }
