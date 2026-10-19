@@ -116,4 +116,4 @@ sua conta e risco. O dispositivo é write-only e o pior caso observado é o disp
 
 ## Licença
 
-A definir.
+MIT — ver [LICENSE](LICENSE).
