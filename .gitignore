@@ -4,6 +4,11 @@ linux-driver/python-lib/probe_extra_out*.txt
 linux-driver/python-lib/p3_anim_out*.txt
 linux-driver/python-lib/p4_out*.txt
 linux-driver/python-lib/p5_*.txt
+linux-driver/python-lib/p6*.txt
+linux-driver/python-lib/p7_*.txt
+linux-driver/python-lib/p8_*.txt
+linux-driver/python-lib/p9_*.txt
+linux-driver/python-lib/p9*.pcap
 linux-driver/python-lib/*_check*.txt
 linux-driver/python-lib/restart_*.txt
 linux-driver/python-lib/frida_capture.log

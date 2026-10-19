@@ -35,6 +35,14 @@ P3 — letras e animações feitas e validadas no hardware:
 - `--mode vibe` (display ↔ 'Zzz' ocioso; `NUVOTON_VIBE_IDLE`/`NUVOTON_VIBE_SECS`) — implementado; no demo não entrou em Zzz (limiar 25% abaixo do baseline da máquina) → re-testar em sessão futura com limiar folgado.
 - Logs: `p5_*.txt`; wrapper `p5_show.ps1`.
 
+**Auditoria de protocolo (sessão 11, fronts)** — fechamento com prova no fio:
+
+- **Wire truth (USBPcap, 110s de UI completa: brilho+°F+cores+efeitos)**: 658 frames @6fps; header SEMPRE `00 00 00 00 00 00 00 00`, type=0x02, len=0x00FC — **zero variação** ⇒ brilho é software (escala de cor), °F é troca de LED no mesmo frame, efeitos são frames animados. **Protocolo do PA120: completo (init + frame LED + query de identidade); não há comando escondido.** (Evidência: `p9.pcap`/`p9_out.txt`.)
+- **EP IN/query**: 11 variantes + init + escuta passiva ⇒ resposta fixa de identidade (`DA DB DC DD 10 10 10 10 ...`), nunca espontânea; família `DC DD` (outros devices) silenciosa no nosso.
+- **IL/exe mining**: catálogo de templates — nosso = init + LED header (len patchada pra 0xFC); outros PIDs = LCD 480×480 (com tag `12 34 56 78` no header!), 360×360, 240×320, 1280×480. TRCC se auto-atualiza por `ftp://47.110.136.13/update/limin/` (app; sem updater de firmware do device nas strings).
+- **Persistência**: o último frame **sobrevive ao replug do USB** (roxo voltou). Pode ser NVRAM ou alimentação residual via header — teste de boot a frio fica TODO.
+- **Frida**: hook v3 (`frida_hid_hook.js`, compat frida 17, kernelbase+kernel32+NtWriteFile+hid.dll+filtro por conteúdo) carrega e enxerga os opens, mas **nenhum write** do processo attachado — superseded pelo USBPcap; fica como nota técnica (provável interação frida/token elevado).
+
 ---
 
 ## O QUE MUDOU (Session 10) — LEIA PRIMEIRO

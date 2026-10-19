@@ -4,6 +4,8 @@
 
 **Update 2026-10-17 (sessão 11)**: correção do mapa — blanks GPU = **57/58** (55/56 são segmentos do dígito das dezenas; captura: '1' do '100' = 57/58); °F **24/60 confirmados LEDs reais** (pulsaram no heartbeat); `build_metrics_frame(status_color=…/status_leds=…)`; teste ao vivo com daemon parado/religado (wrapper `p3_live.ps1`, logs `p3_anim_out*.txt`/`p3_live_check.txt`)
 
+**Auditoria de protocolo (sessão 11, prova no fio)**: protocolo do PA120 **completo** — init + frame LED + query de identidade; brilho = software, °F = LED swap, efeitos = frames (USBPcap 110s, header invariante — `p9.pcap`); EP IN fixo; templates de outros devices (LCD 480×480 c/ `12 34 56 78`, 360×360, 240×320, 1280×480); último frame sobrevive ao replug do USB
+
 **Files Modified (Session 11)**: `lcd_sender.py`, `nuvoton_hid.py`, `NEXT_SESSION_START_HERE.md`, `PROGRESS.md`, `CODEBASE_STATE.md`
 
 **Update 2026-10-17**: fix do crash `inf` (3 camadas) + repo git; **P2 adiado** — validação Linux fica para a instalação Linux futura (alternativa WSL2+usbipd mapeada)

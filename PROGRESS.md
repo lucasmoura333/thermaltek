@@ -133,6 +133,13 @@ Se falhar: regra udev `99-nuvoton-rgb.rules` + permissões do `/dev/hidraw*`.
 - [x] `--clock` e `--image` (fax coluna 84px) implementados/validados offline — sem prioridade visual
 - [~] `--mode vibe` implementado; Zzz não disparou no demo (limiar 25% < baseline) — re-testar depois
 - Logs: `p5_*.txt`; wrapper `p5_show.ps1`
+
+**Auditoria de protocolo (sessão 11, prova no fio)**:
+- [x] USBPcap 110s com UI completa (brilho/°F/cores/efeitos): 658 frames, header invariante (bytes 4-11=00, type 02, len FC) ⇒ brilho = software, °F = troca de LED, efeitos = animação. **Protocolo completo; sem comandos escondidos** (`p9.pcap`)
+- [x] EP IN: resposta fixa de identidade a qualquer query; nunca espontâneo; família `DC DD` silenciosa
+- [x] Templates do exe: nosso = init+LED; outros PIDs = LCD 480×480 (tag `12 34 56 78`), 360×360, 240×320, 1280×480; TRCC auto-update por FTP (app-level)
+- [x] Persistência: último frame sobrevive ao replug (NVRAM ou power residual — boot a frio fica TODO)
+- [~] Frida: hook v3 carrega mas não vê writes do processo (superseded pelo USBPcap; nota técnica)
 - [ ] Pendente: semântica dos indicadores no daemon (pulso de carga/alerta); feature reports a fundo (set passa, get rejeitado); vibe Zzz com limiar real
 
 ---
