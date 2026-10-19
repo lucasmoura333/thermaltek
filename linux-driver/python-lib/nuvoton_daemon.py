@@ -154,13 +154,13 @@ def _lerp_stops(value: float, stops: list) -> Tuple[int, int, int]:
 
 
 def _temp_color(temp_c: Optional[float]) -> Tuple[int, int, int]:
-    if temp_c is None or math.isnan(temp_c):
+    if temp_c is None or not math.isfinite(temp_c):
         return (0, 20, 220)   # unknown -> bright blue, not dim
     return _lerp_stops(temp_c, _TEMP_STOPS)
 
 
 def _usage_color(usage_pct: Optional[float]) -> Tuple[int, int, int]:
-    if usage_pct is None or math.isnan(usage_pct):
+    if usage_pct is None or not math.isfinite(usage_pct):
         return (0, 0, 180)   # unknown -> visible blue
     return _lerp_stops(usage_pct, _USAGE_STOPS)
 
@@ -198,45 +198,48 @@ def run_zones(config_path: str = _DEFAULT_CONFIG,
         signal.signal(signal.SIGTERM, _handle_signal)
 
         while _running:
-            snap       = read_all()
-            cpu_t_col  = _temp_color(snap.cpu_temp)
-            cpu_u_col  = _usage_color(snap.cpu_usage)
-            gpu_t_col  = _temp_color(snap.gpu_temp)
-            gpu_u_col  = _usage_color(snap.gpu_usage)
+            try:
+                snap       = read_all()
+                cpu_t_col  = _temp_color(snap.cpu_temp)
+                cpu_u_col  = _usage_color(snap.cpu_usage)
+                gpu_t_col  = _temp_color(snap.gpu_temp)
+                gpu_u_col  = _usage_color(snap.gpu_usage)
 
-            # When CPU temperature is unavailable (no admin), mirror CPU usage
-            # colour in the temp zone so it's never a dead dim-blue indicator
-            if snap.cpu_temp is None:
-                cpu_t_col = cpu_u_col
+                # When CPU temperature is unavailable (no admin), mirror CPU usage
+                # colour in the temp zone so it's never a dead dim-blue indicator
+                if snap.cpu_temp is None:
+                    cpu_t_col = cpu_u_col
 
-            # Indicators use the "hottest" usage as the ambient colour
-            max_usage = max(
-                snap.cpu_usage if snap.cpu_usage is not None else 0,
-                snap.gpu_usage if snap.gpu_usage is not None else 0,
-            )
-            ind_col = _usage_color(max_usage)
+                # Indicators use the "hottest" usage as the ambient colour
+                max_usage = max(
+                    snap.cpu_usage if snap.cpu_usage is not None else 0,
+                    snap.gpu_usage if snap.gpu_usage is not None else 0,
+                )
+                ind_col = _usage_color(max_usage)
 
-            dev.set_zones_color(
-                cpu_temp=cpu_t_col,
-                cpu_usage=cpu_u_col,
-                gpu_temp=gpu_t_col,
-                gpu_usage=gpu_u_col,
-                ring_color=ind_col,
-                brightness=brightness,
-                repeats=3,
-            )
+                dev.set_zones_color(
+                    cpu_temp=cpu_t_col,
+                    cpu_usage=cpu_u_col,
+                    gpu_temp=gpu_t_col,
+                    gpu_usage=gpu_u_col,
+                    ring_color=ind_col,
+                    brightness=brightness,
+                    repeats=3,
+                )
 
-            cpu_t_str = f"{snap.cpu_temp:.1f}" if snap.cpu_temp is not None else "None"
-            gpu_t_str = f"{snap.gpu_temp:.1f}" if snap.gpu_temp is not None else "None"
-            gpu_u_str = f"{snap.gpu_usage:.1f}" if snap.gpu_usage is not None else "None"
-            logger.info(
-                f"zones | "
-                f"cpu {cpu_t_str}°C -> {cpu_t_col} | "
-                f"cpu_u {snap.cpu_usage:.1f}% -> {cpu_u_col} | "
-                f"gpu {gpu_t_str}°C -> {gpu_t_col} | "
-                f"gpu_u {gpu_u_str}% -> {gpu_u_col} | "
-                f"ind -> {ind_col}"
-            )
+                cpu_t_str = f"{snap.cpu_temp:.1f}" if snap.cpu_temp is not None else "None"
+                gpu_t_str = f"{snap.gpu_temp:.1f}" if snap.gpu_temp is not None else "None"
+                gpu_u_str = f"{snap.gpu_usage:.1f}" if snap.gpu_usage is not None else "None"
+                logger.info(
+                    f"zones | "
+                    f"cpu {cpu_t_str}°C -> {cpu_t_col} | "
+                    f"cpu_u {snap.cpu_usage:.1f}% -> {cpu_u_col} | "
+                    f"gpu {gpu_t_str}°C -> {gpu_t_col} | "
+                    f"gpu_u {gpu_u_str}% -> {gpu_u_col} | "
+                    f"ind -> {ind_col}"
+                )
+            except Exception as e:
+                logger.error(f"update failed (continuing): {e!r}")
 
             if run_once:
                 break
@@ -279,40 +282,43 @@ def run_display(config_path: str = _DEFAULT_CONFIG,
         signal.signal(signal.SIGTERM, _handle_signal)
 
         while _running:
-            snap = read_all()
+            try:
+                snap = read_all()
 
-            cpu_t_col = _temp_color(snap.cpu_temp)
-            cpu_u_col = _usage_color(snap.cpu_usage)
-            gpu_t_col = _temp_color(snap.gpu_temp)
-            gpu_u_col = _usage_color(snap.gpu_usage)
+                cpu_t_col = _temp_color(snap.cpu_temp)
+                cpu_u_col = _usage_color(snap.cpu_usage)
+                gpu_t_col = _temp_color(snap.gpu_temp)
+                gpu_u_col = _usage_color(snap.gpu_usage)
 
-            # When CPU temperature is unavailable (no admin), mirror CPU usage
-            # colour in the temp group so it's never a dead dim-blue indicator
-            if snap.cpu_temp is None:
-                cpu_t_col = cpu_u_col
+                # When CPU temperature is unavailable (no admin), mirror CPU usage
+                # colour in the temp group so it's never a dead dim-blue indicator
+                if snap.cpu_temp is None:
+                    cpu_t_col = cpu_u_col
 
-            body = build_metrics_frame(
-                snap.cpu_temp  if snap.cpu_temp  is not None else 0,
-                snap.cpu_usage if snap.cpu_usage is not None else 0,
-                snap.gpu_temp  if snap.gpu_temp  is not None else 0,
-                snap.gpu_usage if snap.gpu_usage is not None else 0,
-                cpu_temp_color=cpu_t_col, cpu_usage_color=cpu_u_col,
-                gpu_temp_color=gpu_t_col, gpu_usage_color=gpu_u_col,
-            )
-            if brightness != 1.0:
-                body = bytes(min(255, int(c * brightness)) for c in body)
-            send_body(dev, body)
+                body = build_metrics_frame(
+                    snap.cpu_temp  if snap.cpu_temp  is not None else 0,
+                    snap.cpu_usage if snap.cpu_usage is not None else 0,
+                    snap.gpu_temp  if snap.gpu_temp  is not None else 0,
+                    snap.gpu_usage if snap.gpu_usage is not None else 0,
+                    cpu_temp_color=cpu_t_col, cpu_usage_color=cpu_u_col,
+                    gpu_temp_color=gpu_t_col, gpu_usage_color=gpu_u_col,
+                )
+                if brightness != 1.0:
+                    body = bytes(min(255, int(c * brightness)) for c in body)
+                send_body(dev, body)
 
-            cpu_t_str = f"{snap.cpu_temp:.1f}" if snap.cpu_temp is not None else "None"
-            gpu_t_str = f"{snap.gpu_temp:.1f}" if snap.gpu_temp is not None else "None"
-            gpu_u_str = f"{snap.gpu_usage:.1f}" if snap.gpu_usage is not None else "None"
-            logger.info(
-                f"display | "
-                f"cpu {cpu_t_str}°C -> {cpu_t_col} | "
-                f"cpu_u {snap.cpu_usage:.1f}% -> {cpu_u_col} | "
-                f"gpu {gpu_t_str}°C -> {gpu_t_col} | "
-                f"gpu_u {gpu_u_str}% -> {gpu_u_col}"
-            )
+                cpu_t_str = f"{snap.cpu_temp:.1f}" if snap.cpu_temp is not None else "None"
+                gpu_t_str = f"{snap.gpu_temp:.1f}" if snap.gpu_temp is not None else "None"
+                gpu_u_str = f"{snap.gpu_usage:.1f}" if snap.gpu_usage is not None else "None"
+                logger.info(
+                    f"display | "
+                    f"cpu {cpu_t_str}°C -> {cpu_t_col} | "
+                    f"cpu_u {snap.cpu_usage:.1f}% -> {cpu_u_col} | "
+                    f"gpu {gpu_t_str}°C -> {gpu_t_col} | "
+                    f"gpu_u {gpu_u_str}% -> {gpu_u_col}"
+                )
+            except Exception as e:
+                logger.error(f"update failed (continuing): {e!r}")
 
             if run_once:
                 break
@@ -382,19 +388,22 @@ def run(config_path: str = _DEFAULT_CONFIG,
         signal.signal(signal.SIGTERM, _handle_signal)
 
         while _running:
-            snap = read_all()
-            r, g, b = pick_color(mode, snap, mode_cfg, modes_cfg)
-            r = int(r * brightness) & 0xFF
-            g = int(g * brightness) & 0xFF
-            b = int(b * brightness) & 0xFF
+            try:
+                snap = read_all()
+                r, g, b = pick_color(mode, snap, mode_cfg, modes_cfg)
+                r = int(r * brightness) & 0xFF
+                g = int(g * brightness) & 0xFF
+                b = int(b * brightness) & 0xFF
 
-            dev.set_color(r, g, b)
-            logger.info(
-                f"mode={mode} | "
-                f"cpu={snap.cpu_temp}°C {snap.cpu_usage:.1f}% | "
-                f"gpu={snap.gpu_temp}°C {snap.gpu_usage}% | "
-                f"LED rgb({r},{g},{b})"
-            )
+                dev.set_color(r, g, b)
+                logger.info(
+                    f"mode={mode} | "
+                    f"cpu={snap.cpu_temp}°C {snap.cpu_usage:.1f}% | "
+                    f"gpu={snap.gpu_temp}°C {snap.gpu_usage}% | "
+                    f"LED rgb({r},{g},{b})"
+                )
+            except Exception as e:
+                logger.error(f"update failed (continuing): {e!r}")
 
             if run_once:
                 break

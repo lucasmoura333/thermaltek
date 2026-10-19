@@ -70,11 +70,12 @@ def _init_lhm():
 
 
 def _sensor_value(s):
-    """Sensor value as float; None stays None and LHM NaN is unavailable too."""
+    """Sensor value as float; None stays None and non-finite (NaN/inf)
+    readings are unavailable too."""
     if s.Value is None:
         return None
     v = float(s.Value)
-    return None if math.isnan(v) else v
+    return None if not math.isfinite(v) else v
 
 
 def _lhm_sensors():
@@ -309,7 +310,7 @@ def gpu_usage() -> Optional[float]:
                 break
     elif os.name != "nt":
         raw = _linux_gpu_usage()
-    if raw is None:
+    if raw is None or not math.isfinite(raw):
         return None
     if _gpu_usage_ema is None:
         _gpu_usage_ema = raw

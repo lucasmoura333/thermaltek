@@ -49,6 +49,7 @@ USAGE (TRCC.exe must be CLOSED — its 160 ms timer overwrites our packets)
 """
 
 import argparse
+import math
 import os
 import sys
 import time
@@ -190,8 +191,9 @@ def build_metrics_frame(cpu_temp: float, cpu_usage: float,
     frame.light(G_GPU_IND, gpu_indicator_color or indicator_color or gtc)
 
     def _num(v):
-        # Round to int; None and NaN both render as 0 (LHM/ADL can emit NaN).
-        return int(round(v)) if v is not None and v == v else 0
+        # Round to int; None and non-finite (NaN/inf) render as 0
+        # (LHM/ADL can emit NaN; ADL can also emit inf).
+        return int(round(v)) if v is not None and math.isfinite(v) else 0
 
     cpu_t = _num(cpu_temp)
     gpu_t = _num(gpu_temp)
